@@ -249,7 +249,9 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="DlgSetPgaSrcGroup.cpp" />
-    <ClCompile Include="Forwarder.cpp" />
+    <ClCompile Include="Forwarder.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="MainFrm.cpp" />
     <ClCompile Include="StdAfx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
