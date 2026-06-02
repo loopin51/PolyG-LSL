@@ -1,4 +1,4 @@
-# C++ MFC 수집 애플리케이션 (`Test_LXSM_D1WD10_VC2017`)
+# C++ MFC 수집 애플리케이션 (`PolyG_DLL_API`)
 
 제조사가 제공한 C++ MFC 수집 애플리케이션은 PolyG → Python LSL 브리지의 **device-side front-end**다.
 제조사 DLL `LXSM-D1WD10.dll`이 float 프레임 포인터를 담아 앱의 HWND로
@@ -9,7 +9,7 @@ Python 브리지에 그대로 forward한다. 즉 이 앱은 장치 제어(초기
 
 빌드/편집 절차는 별도 문서에 이미 정리되어 있으므로 여기서 반복하지 않는다. 아래를 참조한다.
 
-- 빌드 절차 (Visual Studio 2017): [`../Test_LXSM_D1WD10_VC2017/BUILD_ko.md`](../Test_LXSM_D1WD10_VC2017/BUILD_ko.md)
+- 빌드 절차 (Visual Studio 2017): [`../PolyG_DLL_API/BUILD_ko.md`](../PolyG_DLL_API/BUILD_ko.md)
 - 브리지 측 C++ 연동 개요: [`../polyg-lsl-bridge/cpp/README.md`](../polyg-lsl-bridge/cpp/README.md)
 
 > ⚠️ 소스 파일은 **CP949** 인코딩이다. 직접 열람할 때는

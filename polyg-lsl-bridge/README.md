@@ -171,7 +171,7 @@ python examples/example_scenario.py
 
 순서:
 
-1. **C++ 앱 빌드** (6절 / `cpp/README.md` 참고) — 제조사 `Test_LXSM_D1WD10_VC2017`
+1. **C++ 앱 빌드** (6절 / `cpp/README.md` 참고) — 제조사 `PolyG_DLL_API`
    사본에 `cpp/Forwarder.*`, `BridgeConfig.h`를 넣고 x64로 빌드.
 2. **`BridgeConfig.h`를 `config.toml`과 일치**시킵니다:
    - `BRIDGE_HOST` / `BRIDGE_PORT` = `[transport].host` / `port`
@@ -195,7 +195,7 @@ python examples/example_scenario.py
 
 ## 6. C++ 앱 수정 요약 (자세한 건 `cpp/README.md`)
 
-제조사 `Test_LXSM_D1WD10_VC2017`의 **사본**에 아래만 적용합니다(원본은 건드리지 않음):
+제조사 `PolyG_DLL_API`의 **사본**에 아래만 적용합니다(원본은 건드리지 않음):
 
 1. 프로젝트에 `Forwarder.h`, `Forwarder.cpp`, `BridgeConfig.h` 추가
 2. `#if(x64)` → `#ifdef _WIN64` 로 lib 경로 분기 수정

@@ -1379,14 +1379,14 @@ git commit -m "feat: add C++ UDP framed forwarder"
 
 **Files:**
 - Create: `cpp/README.md`
-- (On Windows) Modify a **copy** of `Test_LXSM_D1WD10_VC2017` — do not edit the original.
+- (On Windows) Modify a **copy** of `PolyG_DLL_API` — do not edit the original.
 
 - [ ] **Step 1: Create `cpp/README.md` with the exact edit recipe**
 
 ````markdown
 # C++ acquisition app changes
 
-Work on a COPY of `Test_LXSM_D1WD10_VC2017`. The original is untouched.
+Work on a COPY of `PolyG_DLL_API`. The original is untouched.
 
 ## 1. Add files to the project
 Add `Forwarder.h`, `Forwarder.cpp`, `BridgeConfig.h` to the VS project.

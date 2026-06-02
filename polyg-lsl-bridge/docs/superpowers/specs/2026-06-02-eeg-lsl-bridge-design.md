@@ -98,7 +98,7 @@ offset size  field
 
 ## 6. C++ acquisition app (delta from manufacturer sample)
 
-Work on a **copy** of `Test_LXSM_D1WD10_VC2017`; the original directory is not
+Work on a **copy** of `PolyG_DLL_API`; the original directory is not
 modified. Changes are localized:
 
 1. **`OnStreamData`** — remove the per-frame `printf` loop (528 lines/frame =

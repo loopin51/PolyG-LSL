@@ -1,6 +1,6 @@
 # Visual Studio에서 x64로 빌드하기 (초보자 가이드)
 
-이 프로젝트(`Test_LXSM_D1WD10_VC2017`)를 Windows의 Visual Studio에서 **x64 구성**으로
+이 프로젝트(`PolyG_DLL_API`)를 Windows의 Visual Studio에서 **x64 구성**으로
 빌드하는 방법입니다. Python LSL 브리지로 프레임을 전송하도록 수정된 사본이며, 원본은
 별도 보관되어 있습니다.
 
@@ -38,7 +38,7 @@
 
 ## 2. 솔루션(프로젝트) 열기
 
-1. 파일 탐색기에서 `Test_LXSM_D1WD10_VC2017` 폴더로 이동.
+1. 파일 탐색기에서 `PolyG_DLL_API` 폴더로 이동.
 2. **`Test_LXSM_D1WD10.sln`** 더블클릭 → Visual Studio 2022가 열립니다.
 3. **"프로젝트 다시 대상 지정(Retarget Projects)"** 창이 뜨면 설치된 최신 SDK/도구집합으로
    두고 **확인(OK)**. (안 떠도 정상입니다.)
@@ -81,7 +81,7 @@
 2. **출력(Output)** 창 마지막에 `빌드: 성공 1, 실패 0` (Build: 1 succeeded, 0 failed) 이면 성공.
 3. 결과 실행파일:
    ```
-   Test_LXSM_D1WD10_VC2017\Release64bit\Test_LXSM_D1WD10.exe
+   PolyG_DLL_API\Release64bit\Test_LXSM_D1WD10.exe
    ```
    이 폴더에 필요한 **`LXSM-D1WD10.dll`, `ACQPLOT.dll`** 이 이미 함께 있어 바로 실행됩니다.
 

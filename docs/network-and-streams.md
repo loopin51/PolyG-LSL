@@ -38,7 +38,7 @@ EEG outlet과 Markers outlet은 서로 다른 PC에 있을 수 있으며, LSL이
 
 ### Transport (host/port, 반드시 일치)
 
-전송은 **localhost UDP**다. C++ 측은 `Test_LXSM_D1WD10_VC2017/BridgeConfig.h`의 매크로로 목적지를 고정한다: `BRIDGE_HOST "127.0.0.1"`, `BRIDGE_PORT 51234`. Python 측 `EEGBridge`는 `config.toml`의 `[transport].host` / `[transport].port`(기본 `127.0.0.1` / `51234`)로 socket을 `bind`한다. **이 두 host/port 값은 반드시 일치해야** 패킷이 도달한다.
+전송은 **localhost UDP**다. C++ 측은 `PolyG_DLL_API/BridgeConfig.h`의 매크로로 목적지를 고정한다: `BRIDGE_HOST "127.0.0.1"`, `BRIDGE_PORT 51234`. Python 측 `EEGBridge`는 `config.toml`의 `[transport].host` / `[transport].port`(기본 `127.0.0.1` / `51234`)로 socket을 `bind`한다. **이 두 host/port 값은 반드시 일치해야** 패킷이 도달한다.
 
 ### 16바이트 헤더 (little-endian)
 
