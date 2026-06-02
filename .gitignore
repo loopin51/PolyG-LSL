@@ -1,0 +1,43 @@
+# ── macOS ───────────────────────────────────────────────
+.DS_Store
+
+# ── Python ──────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+
+# ── 실험 런타임 / 생성물 ────────────────────────────────
+# 3-PC 스크립트가 만드는 CSV 로그
+logs/
+# 해상도별로 pick_coords.py가 생성 (배포마다 다름, 저장소에 두지 않음)
+telescan_coords.json
+
+# ── Visual Studio / C++ 빌드 출력 (Test_LXSM_D1WD10_VC2017) ──
+# 소스(.cpp/.h/.sln/.vcxproj)와 매뉴얼 라이브러리(LIB_*/, *.lib)는 추적한다.
+# 아래는 모두 재생성 가능한 빌드 산출물 / IDE 캐시이므로 제외.
+.vs/
+Debug/
+Release32bit/
+Release64bit/
+Inter32bit/
+Inter64bit/
+x64/
+*.user
+*.ncb
+*.opt
+*.suo
+*.aps
+*.clw
+*.plg
+*.sdf
+*.ipch
+UpgradeLog.htm
+
+# 매뉴얼 제공 런타임 DLL(LXSM-D1WD10.dll, ACQPLOT.dll)은 Release*/ 폴더에만 있고
+# 재생성이 불가하다. 폴더는 위에서 통째로 무시되므로, 해당 DLL만 `git add -f`로
+# 강제 추적한다(폴더 패턴 하위 파일은 .gitignore negate로 되살릴 수 없기 때문).

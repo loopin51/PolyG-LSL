@@ -1,0 +1,20 @@
+# Shared config. The Python bridge reads this file directly.
+# The C++ acquisition app mirrors the [device]/[transport] values in cpp/BridgeConfig.h.
+
+[device]
+model           = "PolyG-A"   # PolyG-A (id 14) / PolyG-E (15) / PolyG-I (16) / PolyG-U (17)
+max_channels    = 32          # 2 / 4 / 8 / 16 / 32
+sample_freq_idx = 9           # 2^idx Hz -> 512 Hz (must be legal for max_channels)
+gain_idx        = 9           # manual Table-5 -> pga_gain 4.25
+
+[scale]
+fixed_gain = 1.0              # TODO: set to the front-end amp gain from datasheet/calibration
+
+[channels]
+# device channel indices (1-based, EEG block) and matching labels (same length)
+select = [1, 2, 3, 4, 5, 6, 7, 8]
+labels = ["Fp1", "Fp2", "F3", "F4", "C3", "C4", "P3", "P4"]
+
+[transport]
+host = "127.0.0.1"
+port = 51234

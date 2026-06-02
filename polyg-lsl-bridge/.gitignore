@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.venv/
+build/
+x64/
+Debug/
+Release*/
+Inter*/
+*.user
+*.egg-info/
+.pytest_cache/

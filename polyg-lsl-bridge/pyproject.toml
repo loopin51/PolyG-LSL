@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "polyg-lsl"
+version = "0.1.0"
+description = "PolyG device -> Python LSL bridge"
+requires-python = ">=3.11"
+dependencies = ["numpy>=1.24", "pylsl>=1.16"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.scripts]
+polyg-bridge = "polyg_lsl.bridge:main"
+polyg-fake-device = "polyg_lsl.fake_device:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
