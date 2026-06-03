@@ -70,15 +70,17 @@ class EEGBridge:
     """Owns the LSL EEG outlet and turns received datagrams into pushed chunks."""
 
     def __init__(self, cfg: Config, *, log_values: bool = False,
-                 log_interval: float = 0.0) -> None:
+                 log_raw: bool = False, log_interval: float = 0.0) -> None:
         from pylsl import StreamOutlet
 
         self.cfg = cfg
         self.outlet = StreamOutlet(build_stream_info(cfg))
         self._seq = SeqTracker()
         self._log_values = log_values
+        self._log_raw = log_raw
         self._log_interval = log_interval
         self._last_log_t: float | None = None
+        self._last_raw_log_t: float | None = None
 
     def handle_datagram(self, buf: bytes) -> int | None:
         """Returns dropped-frame count, or None if the frame was rejected."""
@@ -105,9 +107,37 @@ class EEGBridge:
         )
         ts = local_clock()
         self.outlet.push_chunk(chunk.tolist(), ts)
+        if self._log_raw:
+            self._log_raw_volts(data, ts)
         if self._log_values:
             self._log_channel_values(chunk, ts)
         return dropped
+
+    # Assumed ADC full scale of the device, in volts (+-ADC_FULLSCALE_V). Values
+    # pinned near this rail mean the input is saturated, not a real biopotential.
+    ADC_FULLSCALE_V = 1.25
+
+    def _log_raw_volts(self, data: np.ndarray, ts: float) -> None:
+        """Log per-channel raw input voltage range (pre-scaling) to diagnose scaling.
+
+        For each selected channel, logs the min..max raw volts over the frame and
+        marks ``*`` when it is railed near +-ADC_FULLSCALE_V (e.g. a floating
+        electrode), which inflates the uV output. ``data`` is (num_channels,
+        samples) channel-major volts. Throttled by ``log_interval``.
+        """
+        if (self._last_raw_log_t is not None
+                and (ts - self._last_raw_log_t) < self._log_interval):
+            return
+        self._last_raw_log_t = ts
+        sel = np.asarray(data, dtype=np.float64)[list(self.cfg.select_zero_based), :]
+        vmin = sel.min(axis=1)
+        vmax = sel.max(axis=1)
+        rail = 0.99 * self.ADC_FULLSCALE_V
+        parts = []
+        for label, lo, hi in zip(self.cfg.labels, vmin, vmax):
+            mark = "*" if max(abs(lo), abs(hi)) >= rail else ""
+            parts.append(f"{label}=[{lo:+.3f}..{hi:+.3f}]{mark}")
+        log.info("raw V (*=railed near +-%.2f V) %s", self.ADC_FULLSCALE_V, " ".join(parts))
 
     def _log_channel_values(self, chunk: np.ndarray, ts: float) -> None:
         """Log the most recent per-channel uV value just pushed to the outlet.
@@ -150,14 +180,22 @@ def main() -> None:
         help="log the per-channel uV value pushed to the LSL outlet in real time",
     )
     parser.add_argument(
+        "--log-raw", action="store_true",
+        help="log per-channel raw input voltage range (pre-scaling) to diagnose "
+             "scaling/saturation; '*' marks a channel railed near +-1.25 V",
+    )
+    parser.add_argument(
         "--log-interval", type=float, default=0.0, metavar="SECONDS",
-        help="minimum seconds between value log lines (0 = every frame; "
+        help="minimum seconds between value/raw log lines (0 = every frame; "
              "raise it to throttle at high sample rates)",
     )
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     cfg = load_config(args.config)
-    bridge = EEGBridge(cfg, log_values=args.log_values, log_interval=args.log_interval)
+    bridge = EEGBridge(
+        cfg, log_values=args.log_values, log_raw=args.log_raw,
+        log_interval=args.log_interval,
+    )
     try:
         bridge.run()
     except KeyboardInterrupt:
