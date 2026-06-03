@@ -11,6 +11,9 @@ venv/
 build/
 dist/
 
+# ── 릴리스 패키지 산출물 (release/package.ps1) ──────────
+PolyG_DLL_API-*-win-x64.zip
+
 # ── 실험 런타임 / 생성물 ────────────────────────────────
 # 3-PC 스크립트가 만드는 CSV 로그
 logs/

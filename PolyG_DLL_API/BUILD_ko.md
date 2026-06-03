@@ -6,7 +6,9 @@
 
 **이 프로젝트의 정확한 빌드 조건**
 - 플랫폼 도구집합 **v143** → **Visual Studio 2022** 가 맞습니다 (폴더명은 VC2017이지만 내부 설정은 v143).
-- **MFC 동적 사용 + 문자셋 MultiByte(MBCS)** → 설치 시 **MFC(MBCS 포함) 구성요소**가 반드시 필요합니다 (초보자가 가장 많이 막히는 부분).
+- **문자셋 MultiByte(MBCS)** → 설치 시 **MFC(MBCS 포함) 구성요소**가 반드시 필요합니다 (초보자가 가장 많이 막히는 부분).
+- **Release|x64 는 MFC 정적 링크 + `/MT`(CRT 정적)** 로 설정돼 있어, 빌드된 exe는
+  VC++ 재배포 패키지 없이 단독 실행됩니다 (배포용). Debug/Win32 구성은 종전대로 동적 링크입니다.
 - Release|x64 결과물은 **`Release64bit\` 폴더**에 생성되며, 필요한 DLL 2개가 이미 들어 있습니다.
 
 ---
@@ -108,6 +110,38 @@
 | `LNK1104: cannot open 'LIB_64bit\LXSM-D1WD10.lib'` | 구성이 **x64** 인지 확인(LIB_64bit는 64비트용). 3번 단계 재확인. |
 | `winsock2.h ... windows.h` 순서 경고/오류 | 이미 포인터 멤버 방식으로 회피해 둠. 정상 빌드면 무시. |
 | 실행 시 `DLL을 찾을 수 없음` | exe 옆에 `LXSM-D1WD10.dll`/`ACQPLOT.dll` 필요. Release64bit로 빌드하면 이미 있음. |
+
+---
+
+## 8. 배포 — GitHub Release zip 만들기
+
+사용자가 직접 빌드하지 않고 **zip만 받아 실행**하게 하려면, 빌드된 Release|x64
+산출물을 zip으로 묶어 GitHub Release에 올립니다. Release|x64는 정적 링크라 받는
+사람 PC에 별도 런타임 설치가 필요 없습니다.
+
+저장소 루트의 **`release/package.ps1`** 스크립트가 이 과정을 자동화합니다
+(exe + DLL 2개 + 최종 사용자용 README를 한 zip으로 묶음).
+
+```powershell
+# 0) (권장) 먼저 커밋 & 푸시 — 태그가 올바른 커밋을 가리키도록
+git push
+
+# 1) Visual Studio에서 Release|x64로 이미 빌드했다면 — 패키징만:
+pwsh release\package.ps1 -Version v0.1.0
+
+# 2) 빌드부터 릴리스 업로드까지 한 번에 (msbuild + gh 필요):
+pwsh release\package.ps1 -Version v0.1.0 -Build -Publish
+```
+
+- `-Build` : msbuild로 Release|x64를 빌드한 뒤 패키징.
+- `-Publish` : `gh release create`로 GitHub Release를 만들고 zip을 업로드
+  (사전에 `gh auth login` 필요).
+- 결과 zip: 루트의 `PolyG_DLL_API-<version>-win-x64.zip`.
+- 스크립트는 `dumpbin`이 있으면 exe가 MFC/CRT DLL을 동적으로 참조하는지 검사해,
+  정적 링크가 안 됐으면 경고합니다(이 경우 Release|x64로 다시 빌드).
+
+> ℹ️ 장비 USB 드라이버는 zip에 포함되지 않습니다. 실제 측정 PC에는 제조사 드라이버가
+> 따로 설치돼 있어야 합니다.
 
 ---
 
