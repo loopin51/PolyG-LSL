@@ -69,12 +69,16 @@ def build_stream_info(cfg: Config):
 class EEGBridge:
     """Owns the LSL EEG outlet and turns received datagrams into pushed chunks."""
 
-    def __init__(self, cfg: Config) -> None:
+    def __init__(self, cfg: Config, *, log_values: bool = False,
+                 log_interval: float = 0.0) -> None:
         from pylsl import StreamOutlet
 
         self.cfg = cfg
         self.outlet = StreamOutlet(build_stream_info(cfg))
         self._seq = SeqTracker()
+        self._log_values = log_values
+        self._log_interval = log_interval
+        self._last_log_t: float | None = None
 
     def handle_datagram(self, buf: bytes) -> int | None:
         """Returns dropped-frame count, or None if the frame was rejected."""
@@ -99,8 +103,28 @@ class EEGBridge:
         chunk = frame_to_microvolts(
             data, self.cfg.select_zero_based, self.cfg.fixed_gain, self.cfg.pga_gain
         )
-        self.outlet.push_chunk(chunk.tolist(), local_clock())
+        ts = local_clock()
+        self.outlet.push_chunk(chunk.tolist(), ts)
+        if self._log_values:
+            self._log_channel_values(chunk, ts)
         return dropped
+
+    def _log_channel_values(self, chunk: np.ndarray, ts: float) -> None:
+        """Log the most recent per-channel uV value just pushed to the outlet.
+
+        Throttled to at most one line per ``log_interval`` seconds (0 = every chunk).
+        ``chunk`` is (samples, n_selected); the last row is the newest sample.
+        """
+        if (self._last_log_t is not None
+                and (ts - self._last_log_t) < self._log_interval):
+            return
+        self._last_log_t = ts
+        latest = chunk[-1]
+        pairs = " ".join(
+            f"{label}={value:+.2f}"
+            for label, value in zip(self.cfg.labels, latest)
+        )
+        log.info("uV %s", pairs)
 
     def run(self, *, stop=None) -> None:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -121,10 +145,19 @@ class EEGBridge:
 def main() -> None:
     parser = argparse.ArgumentParser(description="PolyG -> LSL EEG bridge")
     parser.add_argument("--config", default="config.toml")
+    parser.add_argument(
+        "--log-values", action="store_true",
+        help="log the per-channel uV value pushed to the LSL outlet in real time",
+    )
+    parser.add_argument(
+        "--log-interval", type=float, default=0.0, metavar="SECONDS",
+        help="minimum seconds between value log lines (0 = every frame; "
+             "raise it to throttle at high sample rates)",
+    )
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     cfg = load_config(args.config)
-    bridge = EEGBridge(cfg)
+    bridge = EEGBridge(cfg, log_values=args.log_values, log_interval=args.log_interval)
     try:
         bridge.run()
     except KeyboardInterrupt:

@@ -145,6 +145,9 @@ port = 51234                  # C++ → Python UDP 포트
 # 터미널 1 — LSL EEG outlet (브리지)
 polyg-bridge --config config.toml
 #  → "bridge listening on 127.0.0.1:51234" 로그가 떠야 정상
+#  채널별 전위(µV)를 실시간으로 보려면 --log-values 추가:
+#    polyg-bridge --config config.toml --log-values
+#    예) "uV Fp1=+12.34 Fp2=-5.67 ..." (매 프레임). 너무 빠르면 --log-interval 0.5 로 조절
 
 # 터미널 2 — 가짜 장치 (합성 프레임 송신)
 polyg-fake-device --config config.toml
