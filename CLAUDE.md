@@ -4,116 +4,150 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-A three-PC EEG experiment automation system. A controller PC (C) drives a scenario
-timeline and broadcasts UDP commands over a LAN to two worker PCs that automate
-GUI software via simulated mouse/keyboard input:
+A real-time EEG acquisition pipeline that streams a LAXTHA **PolyG** device into
+**Lab Streaming Layer (LSL)**. It has two active components plus an archive:
 
-- **A — EEG PC** (`A_eeg_client.py`): automates Telescan recording software by clicking
-  pre-recorded screen coordinates.
-- **B — Slide PC** (`B_slide_client.py`): automates PowerPoint slideshow advancement via arrow keys.
-- **C — Controller PC** (`C_controller.py`): runs the scenario timer, a Pygame status
-  window, subject-name entry, and the UDP broadcaster. This is the operator's machine.
+- **`polyg-lsl-bridge/`** — the **main** system. A Python package (`polyg_lsl`) that
+  receives raw device frames over localhost UDP, parses/validates them, selects channels,
+  converts to **µV**, and pushes them to an **LSL EEG outlet**. It also provides a
+  scenario-facing **LSL Markers** outlet for stimulus-onset events.
+- **`PolyG_DLL_API/`** — the **device-side front-end**. A manufacturer C++ MFC app
+  (Visual Studio 2017) driving `LXSM-D1WD10.dll`. The DLL posts float frames via
+  `WM_AcqUnitData`; the View handler forwards each frame **as-is** to the Python bridge
+  over UDP (`Forwarder` class). It does **no** scaling or LSL work.
+- **`legacy/`** — the **inactive** former system: a three-PC Telescan/PowerPoint
+  automation script collection (`A_eeg_client.py`, `B_slide_client.py`, `C_controller.py`,
+  `pick_coords.py`, `config.py`, `scenario.yaml`). Unrelated to the LSL bridge; kept for
+  reference only. **Do not** treat it as the current system unless explicitly asked.
 
-All three scripts run on **separate physical machines on the same subnet**. They are not
-meant to run together on one host (they all bind UDP port `4210`). Comments and UI strings are in Korean.
+The C↔Python boundary is a **fixed binary wire format (LXEM)**. C++ only ships frames to
+localhost; channel selection, µV conversion, LSL, and all config live in Python — so the
+acquisition front-end can later be replaced (e.g. a Mac-native capture) without touching
+the Python side. Comments/UI in the C++ app are **CP949**-encoded Korean.
 
 ## Running
 
-Install on all three PCs:
+Everything below runs inside `polyg-lsl-bridge/`. **Python 3.11+** is required (stdlib `tomllib`).
+
 ```bash
-pip install -r requirements.txt   # pyautogui, pyperclip, pyyaml; pygame is also required on C
+cd polyg-lsl-bridge
+python3 -m venv .venv
+. .venv/bin/activate            # Windows PowerShell: .venv\Scripts\Activate.ps1
+pip install -e ".[dev]"         # numpy, pylsl, + pytest
+python -m pytest -q             # expect "24 passed" (LSL tests skip without liblsl)
 ```
 
-Start order matters — bring up the workers (A, B) before the controller (C):
+Two console entry points are installed (defined in `pyproject.toml [project.scripts]`):
+`polyg-bridge` → `polyg_lsl.bridge:main`, `polyg-fake-device` → `polyg_lsl.fake_device:main`.
+
+**Offline run (no device/C++, works on any OS)** — three terminals, each after
+`cd polyg-lsl-bridge && . .venv/bin/activate`:
+
 ```bash
-python A_eeg_client.py      # on the EEG PC
-python B_slide_client.py    # on the slide PC
-python C_controller.py      # on the controller PC (operator)
+polyg-bridge --config config.toml        # LSL EEG outlet; listens on 127.0.0.1:51234
+polyg-fake-device --config config.toml   # synthetic LXEM frames (--duration N to auto-stop)
+python examples/example_scenario.py      # marker outlet demo
 ```
 
-On C: a Pygame window first prompts for the subject name, then shows a START button
-(click it or press Space) to begin the scenario. Peer connectivity (A/B) is shown live.
+**Real-device run (EEG PC, Windows x64):** identical, but replace `polyg-fake-device`
+with the built C++ app. Build/wire-up steps: `PolyG_DLL_API/BUILD_ko.md` and
+`polyg-lsl-bridge/cpp/README.md`. In the app: `Init Device` → pick a **Set Sample …**
+menu (required) → `Start Stream`.
 
-Before first use on the EEG PC, generate the coordinate map (A requires it at startup):
-```bash
-python pick_coords.py       # 5s to focus Telescan, then hover each target for 3s
-```
-
-> Note: the README mentions a `controller.py --file custom.yaml` option, but
-> `C_controller.py` has no CLI argument parsing — it always loads `SCENARIO_FILE`
-> from `config.py`. Change the scenario by editing that constant or `scenario.yaml`.
-
-There is no build step, linter, or test suite. This is a small script collection.
+`pylsl` needs native **liblsl**. If import fails: macOS `brew install labstreaminglayer/tap/lsl`;
+Windows/Linux install a binary from the liblsl releases.
 
 ## Configuration that must be set per-deployment
 
-- `config.py` — `A_IP` / `B_IP` (static IPs of the worker PCs), `PORT` (4210),
-  `SCENARIO_FILE`, `LOG_DIR`. Edit before running in a new lab/network.
-- `telescan_coords.json` — **not in the repo**; generated by `pick_coords.py` and loaded
-  by `A_eeg_client.py` at import time. It is resolution-specific and must be regenerated
-  if the EEG PC's screen layout changes. Without it, A crashes on startup.
-- Firewall: UDP port 4210 must be allowed inbound on all PCs.
+`polyg-lsl-bridge/config.toml` is the single source of truth, **mirrored** into the C++
+`PolyG_DLL_API/BridgeConfig.h` (v1 C++ does not parse TOML). Keep them in sync:
 
-## Communication protocol (UDP, port 4210)
+- `[device] model / max_channels / sample_freq_idx / gain_idx` — device setup. `gain_idx`
+  feeds the µV conversion.
+- `[scale] fixed_gain` — preamp fixed gain; **must be filled in** from the device spec/cal
+  (default `1.0` is a placeholder).
+- `[channels] select / labels` — 1-based device channels to emit and their labels;
+  the two lists **must be equal length**.
+- `[transport] host / port` — localhost UDP target (default `127.0.0.1:51234`); must equal
+  `BridgeConfig.h`'s `BRIDGE_HOST` / `BRIDGE_PORT`.
 
-The controller sends plain ASCII command strings; workers act and reply where applicable.
-Message grammar is `CMD[:ARG]`, split on the first `:`.
+> ⚠️ `[device].gain_idx` and C++ `BRIDGE_PGA_GAIN_IDX` **must be identical**. If they differ,
+> the device's actual gain and Python's µV scaling disagree and **µV values are wrong**.
 
-- **To A (EEG):** `SUBJECT:<id>` (sent first, updates subject_id), `REC_ON[:label]`,
-  `REC_OFF`, `END`.
-- **To B (Slide):** `NEXT`, `PREV`, `END`.
-- **Liveness:** C broadcasts `PING` once per second; A and B reply `PONG`. C's `rx_loop`
-  thread collects PONGs to mark peers connected in the UI. (`SHOW_START`/`SHOW_END`/
-  `MARK_RESP` appear in docs but are not implemented in the clients.)
+## Wire protocol (LXEM, localhost UDP)
 
-## Scenario format (`scenario.yaml`)
+One UDP datagram per frame: a **16-byte little-endian header + channel-major float32
+payload**. The C++ `Forwarder::Send` layout and Python `protocol.py` must match exactly
+(`HEADER_FORMAT = "<IHHHHI"`, `MAGIC = 0x4C58454D` 'LXEM', `VERSION = 1`):
 
-Top-level key `scenario:` holding a list of steps:
-```yaml
-scenario:
-  - { name: "1. 선택지1", dur: 15, send: [A:REC_ON:choice1, B:NEXT] }
-```
-- `name` — step label. The **leading number is the trial/회차, the rest is a keyword**;
-  both are parsed by `extract_trial_and_keyword` (regex `\d+\.\s*...`) and feed the EEG
-  output filename. Keep the `"<N>. <keyword>"` shape.
-- `dur` — seconds (float allowed); C uses `time.perf_counter` for the countdown.
-- `send` — list of `<target>:<command>` where target is `A` or `B`. Sent once at the
-  step's start. Steps with no `send` are pure delays (e.g. fixation crosses).
+| offset | size | field |
+|--------|------|-------|
+| 0 | 4 | magic `0x4C58454D` |
+| 4 | 2 | version (`1`) |
+| 6 | 2 | num_channels (C++ `DISPMAXCH`) |
+| 8 | 2 | samples_per_channel (C++ `DISPDATANUM`) |
+| 10 | 2 | flags (`0`) |
+| 12 | 4 | seq |
+| 16 | payload | `num_channels × samples_per_channel × 4` bytes |
+
+## Python package layout (`src/polyg_lsl/`)
+
+- `protocol.py` — LXEM `parse_header` / `parse_frame` / `build_frame`; raises `FrameError`
+  on bad magic/version/length.
+- `scaling.py` — `raw_to_microvolts(volts, fixed_gain, pga_gain)`:
+  `µV = volts / (fixed_gain × pga_gain) × 1e6`.
+- `config.py` — `Config` dataclass + `load_config()` with validation (`ConfigError`);
+  `expected_num_channels`, `expected_samples_per_channel`, `select_zero_based`.
+- `bridge.py` — `EEGBridge` owns the EEG `StreamOutlet`; `handle_datagram` parses a frame,
+  selects channels, converts µV, and `push_chunk(..., local_clock())`. `SeqTracker` counts
+  dropped frames; `build_stream_info` constructs the LSL `StreamInfo`. `main()` is the CLI.
+- `markers.py` — `MarkerStream(name, source_id).push(label, timestamp=None)`: an
+  irregular-rate single-channel string Markers outlet; stamps `local_clock()` if no ts.
+- `fake_device.py` — synthetic LXEM frame source for offline testing.
 
 ## How the pieces fit together (the non-obvious parts)
 
-- **Timing is open-loop.** C is the single source of truth for timing: it sleeps `dur`
-  per step and fires commands at step boundaries. A and B have no timers — they react
-  instantly to each UDP message. There is no acknowledgement that a command was executed
-  (only PING/PONG liveness), and UDP delivery is not retried.
+- **C++ is a dumb forwarder.** `OnStreamData` draws the waveform (ACQPLOT) then calls
+  `m_forwarder.Send(m_seq++, frame, DISPMAXCH, DISPDATANUM)`. No scaling/LSL in C++.
 
-- **EEG filenames are derived, not transmitted.** `record_on(label)` stores the label and
-  resolves the matching scenario index via `find_step_idx_by_label`. On the following
-  `REC_OFF`, A builds the filename from the **previous** step's keyword, the synced trial
-  counter, subject_id, and a timestamp: `{subject}_{NN}회차_{keyword}_{YYYYmmdd_HHMMSS}.eeg`.
-  So a recording is named after the step that *preceded* its stop, and correct naming
-  depends on `scenario.yaml` on the EEG PC matching the controller's.
+- **Winsock header order is load-bearing.** `Forwarder.h` includes `<winsock2.h>`, which
+  must precede `<windows.h>`. So the View header only forward-declares `Forwarder* m_forwarder;`
+  and includes `Forwarder.h` from the `.cpp` only. **`Forwarder.cpp` is excluded from
+  precompiled headers** (`<PrecompiledHeader>NotUsing</PrecompiledHeader>` in the vcxproj):
+  adding `#include "stdafx.h"` would pull MFC's `windows.h`→`winsock.h` in *before*
+  `winsock2.h` and break the build (this is the fix for the C1010 PCH error — don't undo it).
 
-- **First-trial vs. later-trial save paths differ.** In `record_off`, `first_trial`
-  walks the full Telescan save dialog (desktop → new folder named after subject →
-  open → name the file); every subsequent save only types the filename. This sequence is
-  encoded as raw coordinate clicks + Enter presses and is fragile to any dialog/layout change.
+- **Marker timing.** Call `MarkerStream.push()` as close as possible to the actual stimulus
+  presentation. Start the LSL recorder **before** the scenario so the first marker is captured.
+  EEG and marker outlets may live on different PCs; LSL clock-corrects and aligns them.
 
-- **Korean text entry uses the clipboard.** `type_korean` copies via `pyperclip` and pastes
-  with Ctrl+V because `pyautogui.typewrite` cannot type Hangul. This is why `pyperclip`
-  is a hard dependency.
+- **Frame/seq diagnostics.** The bridge logs `frame/config mismatch` when an incoming frame
+  disagrees with `config.toml` (channel count / model), and `dropped N frame(s)` from the
+  seq gap (occasional UDP loss at high sampling is normal).
 
-- **`pyautogui.FAILSAFE = True`** on A and B: slamming the mouse to a screen corner aborts
-  the script — the operator's emergency stop on the worker PCs.
+## Testing
 
-- **Logging:** each script appends CSV to `logs/` with a per-day, per-role filename
-  (`controller_YYYY-MM-DD.csv`, `A_eeg_*.csv`, `B_slide_*.csv`), recording every TX/RX
-  and action with millisecond ISO timestamps.
+```bash
+cd polyg-lsl-bridge && python -m pytest -v   # 24 tests
+```
+
+Protocol/scaling/config tests run without liblsl. LSL round-trip tests
+(`test_markers`, `test_integration_lsl`, `test_end_to_end`) **auto-skip** when liblsl is absent.
 
 ## Editing guidance
 
-- Adding an A command: handle it in `handle_udp_message` in `A_eeg_client.py` and reference
-  it from `scenario.yaml` as `A:<CMD>`. Adding a B command: same in `B_slide_client.py`.
-- Keep `scenario.yaml` identical on C and A — A re-parses it locally for filename logic.
-- Korean rendering in the Pygame UI depends on a CJK font; `get_korean_font` tries
-  AppleGothic → Malgun Gothic → Nanum family → default. Garbled text means none were found.
+- Changing the frame layout means editing **both** `protocol.py` and C++ `Forwarder.cpp`
+  (and bumping `VERSION` in both) — they are a contract.
+- Adding/removing a config field: update `config.py` (parse + validate) and, if the C++ side
+  needs it, mirror it into `BridgeConfig.h`.
+- The C++ sources are **CP949**; read them with `iconv -f CP949 -t UTF-8 <file>` so Korean
+  comments don't garble. Docs (`docs/*.md`) and the root README are UTF-8.
+- After changing the C++ app, rebuild **x64** in Visual Studio 2017. Re-select a sampling
+  frequency menu after changing the channel count (manufacturer constraint).
+
+## Documentation
+
+Start at `docs/index.md`. Key pages: `docs/cpp-acquisition-app.md` (DLL API, View handlers,
+Forwarder), `docs/network-and-streams.md` (UDP packet ↔ LSL flow),
+`docs/protocols-and-formats.md`. The root `readme.md` is the user-facing guide; the bridge's
+own `polyg-lsl-bridge/README.md` has the deepest install/run/config reference.
