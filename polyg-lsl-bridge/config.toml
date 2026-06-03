@@ -8,7 +8,7 @@ sample_freq_idx = 8           # 2^idx Hz -> 512 Hz (must be legal for max_channe
 gain_idx        = 9           # manual Table-5 -> pga_gain 4.25
 
 [scale]
-fixed_gain = 1.0              # TODO: set to the front-end amp gain from datasheet/calibration
+fixed_gain = 2000.0              # TODO: set to the front-end amp gain from datasheet/calibration. 지금은 대강만 맞췄음.
 
 [channels]
 # device channel indices (1-based, EEG block) and matching labels (same length)
