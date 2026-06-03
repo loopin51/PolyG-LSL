@@ -145,9 +145,7 @@ port = 51234                  # C++ → Python UDP 포트
 # 터미널 1 — LSL EEG outlet (브리지)
 polyg-bridge --config config.toml
 #  → "bridge listening on 127.0.0.1:51234" 로그가 떠야 정상
-#  채널별 전위(µV)를 실시간으로 보려면 --log-values 추가:
-#    polyg-bridge --config config.toml --log-values
-#    예) "uV Fp1=+12.34 Fp2=-5.67 ..." (매 프레임). 너무 빠르면 --log-interval 0.5 로 조절
+#  채널별 전위(µV)를 실시간으로 보려면 --log-values 추가 (아래 "채널별 전위 실시간 로깅" 참고)
 
 # 터미널 2 — 가짜 장치 (합성 프레임 송신)
 polyg-fake-device --config config.toml
@@ -165,6 +163,34 @@ python examples/example_scenario.py
 둘 다 체크하고 Start하면 시간 정렬된 `.xdf` 파일로 저장됩니다.
 
 > 끝낼 때는 각 터미널에서 `Ctrl+C`. 가짜 장치는 `--duration 10`을 주면 10초 후 자동 종료됩니다.
+
+### 채널별 전위 실시간 로깅 (`--log-values`)
+
+브리지가 LSL outlet으로 내보내는 **채널별 전위(µV)를 콘솔 로그로 실시간 확인**할 수
+있습니다. 신호가 들어오는지, 스케일이 맞는지 빠르게 점검할 때 유용합니다. 오프라인
+(가짜 장치)·실제 장비 모두에서 동작합니다.
+
+```bash
+polyg-bridge --config config.toml --log-values
+```
+
+매 프레임마다, push한 청크의 **가장 최근 샘플**을 `config.toml`의 `[channels].labels`로
+라벨링해 한 줄씩 출력합니다:
+
+```
+2026-06-03 12:00:00,123 INFO uV Fp1=+12.34 Fp2=-5.67 F3=+0.82 F4=-1.05 ...
+```
+
+| 옵션 | 의미 |
+|---|---|
+| `--log-values` | 채널별 µV 로깅 켜기 (기본 꺼짐, 지정해야 출력) |
+| `--log-interval SECONDS` | 로그 줄 사이 최소 간격(초). 기본 `0` = 매 프레임. 값을 키우면 스로틀 |
+
+> ⚠️ 매 프레임 로그라 출력이 빠릅니다(예: PolyG-A 512Hz면 초당 약 32줄). 길게 측정할
+> 때는 `--log-interval 0.5`(0.5초마다 한 줄)처럼 간격을 주세요. **표시되는 값은 µV이며,
+> 이상하게 크거나 작으면** `[scale].fixed_gain` / `[device].gain_idx`(↔ C++
+> `BRIDGE_PGA_GAIN_IDX`)를 점검하세요. 이 로깅은 LSL 스트림 데이터 자체에는 영향을
+> 주지 않습니다(콘솔 출력일 뿐).
 
 ---
 
