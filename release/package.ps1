@@ -19,7 +19,7 @@
     Commit & push first so the tag points at the right commit.
 
 .EXAMPLE
-    # Already built in Visual Studio — just package:
+    # Already built in Visual Studio - just package:
     pwsh release\package.ps1 -Version v0.1.0
 
 .EXAMPLE
@@ -79,7 +79,7 @@ try { $dumpbin = (Get-Command dumpbin.exe -ErrorAction SilentlyContinue).Source 
 if ($dumpbin) {
     $deps = & $dumpbin /dependents $exe 2>$null
     if ($deps -match "MFC\d+\.dll" -or $deps -match "VCRUNTIME\d+\.dll" -or $deps -match "MSVCP\d+\.dll") {
-        Write-Warning "exe still imports MFC/VCRUNTIME/MSVCP DLLs — it is NOT statically linked."
+        Write-Warning "exe still imports MFC/VCRUNTIME/MSVCP DLLs - it is NOT statically linked."
         Write-Warning "Confirm UseOfMfc=Static and RuntimeLibrary=MultiThreaded (/MT) for Release|x64, then rebuild."
     } else {
         Write-Host "==> Static-link check passed (no dynamic MFC/CRT imports)." -ForegroundColor Green
@@ -106,13 +106,14 @@ if ($Publish) {
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
         throw "gh CLI not found. Install from https://cli.github.com/ and run 'gh auth login'."
     }
-    $notes = @"
-PolyG EEG 취득 앱 (Windows x64, 정적 링크 — 별도 런타임 설치 불필요).
-
-압축을 풀고 'Test_LXSM_D1WD10.exe'를 실행하세요. 같은 폴더의 두 DLL을 함께 두어야 합니다.
-사용 전 'polyg-bridge'를 먼저 실행해야 LSL로 데이터가 나갑니다 (zip 안의 README.md 참고).
-"@
-    gh release create $Version $zip --title "PolyG_DLL_API $Version" --notes $notes
+    # Release notes are kept in a separate UTF-8 file and passed via --notes-file.
+    # This avoids Korean mojibake: Windows PowerShell 5.x reads a BOM-less .ps1 as the
+    # ANSI code page (CP949) and also pipes native-command args in that code page, so a
+    # Korean here-string inside this script would corrupt. Keeping this .ps1 ASCII-only
+    # and letting gh read the UTF-8 file directly sidesteps both problems.
+    $notesFile = Join-Path $PSScriptRoot "RELEASE_NOTES.md"
+    if (-not (Test-Path $notesFile)) { throw "Release notes file not found: $notesFile" }
+    gh release create $Version $zip --title "PolyG_DLL_API $Version" --notes-file $notesFile
     if ($LASTEXITCODE -ne 0) { throw "gh release create failed with exit code $LASTEXITCODE" }
     Write-Host "==> Released." -ForegroundColor Green
 }
