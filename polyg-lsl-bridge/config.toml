@@ -2,9 +2,9 @@
 # The C++ acquisition app mirrors the [device]/[transport] values in cpp/BridgeConfig.h.
 
 [device]
-model           = "PolyG-A"   # PolyG-A (id 14) / PolyG-E (15) / PolyG-I (16) / PolyG-U (17)
-max_channels    = 32          # 2 / 4 / 8 / 16 / 32
-sample_freq_idx = 9           # 2^idx Hz -> 512 Hz (must be legal for max_channels)
+model           = "PolyG-I"   # PolyG-A (id 14) / PolyG-E (15) / PolyG-I (16) / PolyG-U (17)
+max_channels    = 8          # 2 / 4 / 8 / 16 / 32
+sample_freq_idx = 8           # 2^idx Hz -> 512 Hz (must be legal for max_channels)
 gain_idx        = 9           # manual Table-5 -> pga_gain 4.25
 
 [scale]
