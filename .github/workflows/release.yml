@@ -1,7 +1,8 @@
 name: Release Windows build
 
 # Tag push (v*) -> build PolyG_DLL_API on a Windows runner -> package the
-# standalone zip -> publish a GitHub Release with the zip attached.
+# standalone zip -> publish a GitHub Release with the zip attached and a
+# Changelog (commit subjects since the previous v* tag) appended to the notes.
 #
 # Manual runs (workflow_dispatch) build + package and upload the zip as a
 # workflow artifact only (no Release is created), so you can test packaging
@@ -36,6 +37,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history + tags, so the changelog can diff tag-to-tag
 
       # Puts msbuild on PATH (full MSVC dev environment).
       # Official alternative: microsoft/setup-msbuild@v2 (msbuild only) works too.
@@ -74,5 +77,32 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$env:GITHUB_REF_NAME" "${{ steps.pkg.outputs.zip }}" --title "PolyG_DLL_API $env:GITHUB_REF_NAME" --notes-file release/RELEASE_NOTES.md
+          # Decode git's UTF-8 output correctly (commit subjects may contain Korean).
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          $OutputEncoding = [System.Text.Encoding]::UTF8
+
+          $tag = $env:GITHUB_REF_NAME
+
+          # Previous release tag reachable from this tag (newest v* before $tag).
+          $prev = git tag --list 'v*' --sort=-v:refname --merged $tag |
+                  Where-Object { $_ -ne $tag } | Select-Object -First 1
+
+          # Commit subjects in the range, as a Markdown bullet list.
+          $range = if ($prev) { "$prev..$tag" } else { $tag }
+          $commits = (git log $range --no-merges --pretty=format:'- %s (%h)') -join "`n"
+          if ([string]::IsNullOrWhiteSpace($commits)) { $commits = "- (no changes)" }
+
+          # Static notes (UTF-8) + an appended Changelog section.
+          $body  = (Get-Content release/RELEASE_NOTES.md -Raw).TrimEnd()
+          $body += "`n`n## Changelog`n`n"
+          if ($prev) { $body += "Changes since ${prev}:`n`n" }
+          $body += $commits + "`n"
+          if ($prev) {
+            $body += "`n**Full Changelog:** https://github.com/$env:GITHUB_REPOSITORY/compare/$prev...$tag`n"
+          }
+
+          $notes = Join-Path $env:RUNNER_TEMP "release-notes.md"
+          Set-Content -Path $notes -Value $body -Encoding utf8
+
+          gh release create "$tag" "${{ steps.pkg.outputs.zip }}" --title "PolyG_DLL_API $tag" --notes-file $notes
           if ($LASTEXITCODE -ne 0) { throw "gh release create failed ($LASTEXITCODE)" }
