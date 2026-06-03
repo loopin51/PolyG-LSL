@@ -1,0 +1,75 @@
+name: Release Windows build
+
+# Tag push (v*) -> build PolyG_DLL_API on a Windows runner -> package the
+# standalone zip -> publish a GitHub Release with the zip attached.
+#
+# Manual runs (workflow_dispatch) build + package and upload the zip as a
+# workflow artifact only (no Release is created), so you can test packaging
+# without cutting a tag.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write          # required to create the Release and upload assets
+
+env:
+  CONFIGURATION: Release
+  PLATFORM: x64
+  # The project's PlatformToolset is v145, but GitHub-hosted windows-2022 ships
+  # VS 2022 (v143). Override to the toolset present on the runner. UseOfMfc=Static
+  # and RuntimeLibrary=MultiThreaded (/MT) are per-config and unaffected, so the
+  # CI artifact is still a standalone (statically linked) exe.
+  TOOLSET: v143
+
+jobs:
+  build-release:
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Puts msbuild AND dumpbin on PATH (the full MSVC dev environment).
+      # Official alternative: microsoft/setup-msbuild@v2 (msbuild only; the
+      # static-link check in package.ps1 then skips because dumpbin is absent).
+      - name: Set up MSVC dev environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Build (Release|x64)
+        shell: pwsh
+        run: |
+          msbuild PolyG_DLL_API\Test_LXSM_D1WD10.vcxproj /p:Configuration=$env:CONFIGURATION /p:Platform=$env:PLATFORM /p:PlatformToolset=$env:TOOLSET /m /nologo /v:minimal
+          if ($LASTEXITCODE -ne 0) { throw "msbuild failed ($LASTEXITCODE)" }
+
+      - name: Package zip
+        id: pkg
+        shell: pwsh
+        run: |
+          $tag = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { "dev-" + $env:GITHUB_SHA.Substring(0,7) }
+          ./release/package.ps1 -Version $tag
+          $zip = "PolyG_DLL_API-$tag-win-x64.zip"
+          if (-not (Test-Path $zip)) { throw "expected package not found: $zip" }
+          "tag=$tag"  | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "zip=$zip"  | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.pkg.outputs.zip }}
+          path: ${{ steps.pkg.outputs.zip }}
+          if-no-files-found: error
+
+      - name: Publish GitHub Release (tags only)
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$env:GITHUB_REF_NAME" "${{ steps.pkg.outputs.zip }}" --title "PolyG_DLL_API $env:GITHUB_REF_NAME" --notes-file release/RELEASE_NOTES.md
+          if ($LASTEXITCODE -ne 0) { throw "gh release create failed ($LASTEXITCODE)" }

@@ -143,6 +143,22 @@ pwsh release\package.ps1 -Version v0.1.0 -Build -Publish
 > ℹ️ 장비 USB 드라이버는 zip에 포함되지 않습니다. 실제 측정 PC에는 제조사 드라이버가
 > 따로 설치돼 있어야 합니다.
 
+### 자동화 (GitHub Actions)
+
+수동 빌드·업로드 대신, **태그를 push하면 자동으로** Windows 러너에서 빌드 → zip
+패키징 → Release 업로드까지 진행됩니다 (`.github/workflows/release.yml`).
+
+```bash
+git tag v0.1.1
+git push origin v0.1.1     # 이 push가 워크플로를 트리거
+```
+
+- 러너(windows-2022)에는 VS 2022 **v143**만 있으므로 워크플로는 `/p:PlatformToolset=v143`
+  으로 빌드합니다(정적 링크·MBCS 설정은 동일하게 적용되어 단독 실행 exe가 나옵니다).
+- 릴리스 노트는 `release/RELEASE_NOTES.md`(UTF-8)에서 읽습니다. 문구 변경은 이 파일만 수정.
+- `Actions` 탭에서 **Run workflow**(workflow_dispatch)로 수동 실행하면 Release를 만들지
+  않고 zip을 **빌드 아티팩트**로만 올려, 패키징을 미리 시험할 수 있습니다.
+
 ---
 
 ## 참고
