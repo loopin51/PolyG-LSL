@@ -20,9 +20,13 @@ env:
   CONFIGURATION: Release
   PLATFORM: x64
   # The project's PlatformToolset is v145, but GitHub-hosted windows-2022 ships
-  # VS 2022 (v143). Override to the toolset present on the runner. UseOfMfc=Static
-  # and RuntimeLibrary=MultiThreaded (/MT) are per-config and unaffected, so the
-  # CI artifact is still a standalone (statically linked) exe.
+  # VS 2022 (v143). Override to the toolset present on the runner; the linkage
+  # (dynamic MFC + /MD) is per-config and unaffected.
+  #
+  # NOTE: the app is app-local deployed (runtime DLLs bundled by package.ps1), not
+  # statically linked. The runner's System32 has the VS2015-2022 DLLs but NOT the
+  # VS2010 ones (mfc100 / msvcr100) that ACQPLOT.dll needs, so a CI-built zip is
+  # INCOMPLETE unless those two DLLs are vendored in release/runtime/ (see its README).
   TOOLSET: v143
 
 jobs:
@@ -33,9 +37,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Puts msbuild AND dumpbin on PATH (the full MSVC dev environment).
-      # Official alternative: microsoft/setup-msbuild@v2 (msbuild only; the
-      # static-link check in package.ps1 then skips because dumpbin is absent).
+      # Puts msbuild on PATH (full MSVC dev environment).
+      # Official alternative: microsoft/setup-msbuild@v2 (msbuild only) works too.
       - name: Set up MSVC dev environment
         uses: ilammy/msvc-dev-cmd@v1
         with:

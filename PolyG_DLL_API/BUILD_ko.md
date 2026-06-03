@@ -5,10 +5,11 @@
 별도 보관되어 있습니다.
 
 **이 프로젝트의 정확한 빌드 조건**
-- 플랫폼 도구집합 **v143** → **Visual Studio 2022** 가 맞습니다 (폴더명은 VC2017이지만 내부 설정은 v143).
+- 플랫폼 도구집합 **v145** → **Visual Studio 2022** 가 맞습니다 (폴더명은 VC2017이지만 내부 설정은 v145).
 - **문자셋 MultiByte(MBCS)** → 설치 시 **MFC(MBCS 포함) 구성요소**가 반드시 필요합니다 (초보자가 가장 많이 막히는 부분).
-- **Release|x64 는 MFC 정적 링크 + `/MT`(CRT 정적)** 로 설정돼 있어, 빌드된 exe는
-  VC++ 재배포 패키지 없이 단독 실행됩니다 (배포용). Debug/Win32 구성은 종전대로 동적 링크입니다.
+- **MFC는 동적 링크(공유 DLL)** 입니다. 제조사 `ACQPLOT.dll`이 공유 MFC(`mfc100.dll`)에
+  의존하므로, 호스트를 **정적 링크하면 크래시**합니다. 단독 실행은 정적 링크가 아니라
+  **런타임 DLL 동봉**(아래 8절)으로 해결합니다.
 - Release|x64 결과물은 **`Release64bit\` 폴더**에 생성되며, 필요한 DLL 2개가 이미 들어 있습니다.
 
 ---
@@ -116,11 +117,12 @@
 ## 8. 배포 — GitHub Release zip 만들기
 
 사용자가 직접 빌드하지 않고 **zip만 받아 실행**하게 하려면, 빌드된 Release|x64
-산출물을 zip으로 묶어 GitHub Release에 올립니다. Release|x64는 정적 링크라 받는
-사람 PC에 별도 런타임 설치가 필요 없습니다.
+산출물을 zip으로 묶어 GitHub Release에 올립니다. 앱은 동적 링크지만, 스크립트가
+**필요한 런타임 DLL을 zip에 함께 동봉**하므로 **Windows 10+** 클린 PC에서 별도 설치
+없이 실행됩니다(app-local 배포).
 
 저장소 루트의 **`release/package.ps1`** 스크립트가 이 과정을 자동화합니다
-(exe + DLL 2개 + 최종 사용자용 README를 한 zip으로 묶음).
+(exe + 장비 DLL 2개 + 런타임 DLL + 최종 사용자용 README를 한 zip으로 묶음).
 
 ```powershell
 # 0) (권장) 먼저 커밋 & 푸시 — 태그가 올바른 커밋을 가리키도록
@@ -137,8 +139,9 @@ pwsh release\package.ps1 -Version v0.1.0 -Build -Publish
 - `-Publish` : `gh release create`로 GitHub Release를 만들고 zip을 업로드
   (사전에 `gh auth login` 필요).
 - 결과 zip: 루트의 `PolyG_DLL_API-<version>-win-x64.zip`.
-- 스크립트는 `dumpbin`이 있으면 exe가 MFC/CRT DLL을 동적으로 참조하는지 검사해,
-  정적 링크가 안 됐으면 경고합니다(이 경우 Release|x64로 다시 빌드).
+- 런타임 DLL은 빌드 PC의 `System32`(또는 `release/runtime/`)에서 복사해 동봉합니다.
+  일부 DLL을 못 찾으면 경고하며, 어떤 DLL이 빠졌는지 표시합니다. 자세한 건
+  `release/runtime/README.md` 참고.
 
 > ℹ️ 장비 USB 드라이버는 zip에 포함되지 않습니다. 실제 측정 PC에는 제조사 드라이버가
 > 따로 설치돼 있어야 합니다.
@@ -154,7 +157,10 @@ git push origin v0.1.1     # 이 push가 워크플로를 트리거
 ```
 
 - 러너(windows-2022)에는 VS 2022 **v143**만 있으므로 워크플로는 `/p:PlatformToolset=v143`
-  으로 빌드합니다(정적 링크·MBCS 설정은 동일하게 적용되어 단독 실행 exe가 나옵니다).
+  으로 빌드합니다(동적 링크·MBCS 설정은 도구집합과 무관하게 그대로 적용됩니다).
+- ⚠️ 러너 `System32`에는 **VS2010 런타임(`mfc100`/`msvcr100`)이 없어**, CI가 만든 zip은
+  그대로면 클린 PC에서 ACQPLOT.dll 로드에 실패할 수 있습니다. 완전한 CI zip을 원하면 이
+  두 DLL을 `release/runtime/`에 커밋해 두세요(`release/runtime/README.md` 참고).
 - 릴리스 노트는 `release/RELEASE_NOTES.md`(UTF-8)에서 읽습니다. 문구 변경은 이 파일만 수정.
 - `Actions` 탭에서 **Run workflow**(workflow_dispatch)로 수동 실행하면 Release를 만들지
   않고 zip을 **빌드 아티팩트**로만 올려, 패키징을 미리 시험할 수 있습니다.

@@ -5,8 +5,13 @@
 
 .DESCRIPTION
     Run this on the Windows build PC. It collects the Release x64 build output
-    (statically linked exe + the two device DLLs + an end-user README) into a single
-    zip that users can download and run without Visual Studio or a VC++ redistributable.
+    (exe + the two device DLLs + the bundled C/C++ runtime DLLs + an end-user README)
+    into a single zip that users can download and run on a clean Windows 10+ PC
+    without installing a VC++ redistributable (app-local deployment).
+
+    Note: the app cannot be statically linked because ACQPLOT.dll is a prebuilt MFC
+    DLL that requires the shared (dynamic) MFC/CRT. Static MFC in the host crashes it.
+    So the host links MFC dynamically and the runtime DLLs are shipped alongside.
 
 .PARAMETER Version
     Release tag, e.g. v0.1.0. Used for the zip name and the GitHub release tag.
@@ -72,21 +77,7 @@ foreach ($f in $payload) {
     }
 }
 
-# Sanity check: warn if the exe still depends on the dynamic MFC/CRT DLLs
-# (i.e. the static-link vcxproj change was not applied / not rebuilt).
-$dumpbin = $null
-try { $dumpbin = (Get-Command dumpbin.exe -ErrorAction SilentlyContinue).Source } catch {}
-if ($dumpbin) {
-    $deps = & $dumpbin /dependents $exe 2>$null
-    if ($deps -match "MFC\d+\.dll" -or $deps -match "VCRUNTIME\d+\.dll" -or $deps -match "MSVCP\d+\.dll") {
-        Write-Warning "exe still imports MFC/VCRUNTIME/MSVCP DLLs - it is NOT statically linked."
-        Write-Warning "Confirm UseOfMfc=Static and RuntimeLibrary=MultiThreaded (/MT) for Release|x64, then rebuild."
-    } else {
-        Write-Host "==> Static-link check passed (no dynamic MFC/CRT imports)." -ForegroundColor Green
-    }
-}
-
-# Stage and zip.
+# Stage the app.
 $stageName = "PolyG_DLL_API-$Version-win-x64"
 $stage = Join-Path ([System.IO.Path]::GetTempPath()) $stageName
 if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
@@ -94,6 +85,40 @@ New-Item -ItemType Directory -Path $stage | Out-Null
 
 Copy-Item $payload -Destination $stage
 Copy-Item $userDoc -Destination (Join-Path $stage "README.md")
+
+# Bundle the C/C++ runtime DLLs next to the exe (app-local deployment) so the app runs
+# on a clean Windows 10+ PC with no VC++ redistributable install. The host exe needs the
+# VS2015-2022 runtime (MBCS MFC); the prebuilt ACQPLOT.dll needs the VS2010 runtime. The
+# UCRT (ucrtbase.dll / api-ms-win-crt-*) ships with Windows 10+, so it is not bundled.
+# Each DLL is taken from release\runtime\ (committed, if present) first, else from
+# System32 on this build machine. CI runners usually lack the VS2010 DLLs (mfc100 /
+# msvcr100) in System32 -- vendor those in release\runtime\ for a complete CI zip.
+$runtimeDir = Join-Path $PSScriptRoot "runtime"
+$sys32 = Join-Path $env:WINDIR "System32"
+$runtimeDlls = @(
+    "mfc140.dll", "msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll",  # host exe (VS2015-2022, MBCS MFC)
+    "mfc100.dll", "msvcr100.dll"                                              # ACQPLOT.dll (VS2010)
+)
+$missing = @()
+foreach ($dll in $runtimeDlls) {
+    $src = $null
+    $vendored = Join-Path $runtimeDir $dll
+    if (Test-Path $vendored) { $src = $vendored }
+    elseif (Test-Path (Join-Path $sys32 $dll)) { $src = Join-Path $sys32 $dll }
+    if ($src) {
+        Copy-Item $src -Destination $stage
+        Write-Host "    bundled $dll  ($src)" -ForegroundColor DarkGray
+    } else {
+        $missing += $dll
+    }
+}
+if ($missing.Count -gt 0) {
+    Write-Warning ("Runtime DLL(s) not found, NOT bundled: {0}" -f ($missing -join ", "))
+    Write-Warning "The zip may crash on a clean PC. Put the missing DLL(s) in release\runtime\"
+    Write-Warning "(commit them), or install the matching VC++ redistributable here, then re-run."
+} else {
+    Write-Host "==> All runtime DLLs bundled." -ForegroundColor Green
+}
 
 $zip = Join-Path $repoRoot "$stageName.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force }
